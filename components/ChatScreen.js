@@ -9,15 +9,26 @@ import AttachFileIcon from "@material-ui/icons/AttachFile";
 import { useCollection } from "react-firebase-hooks/firestore";
 import InsertEmoticonIcon from "@material-ui/icons/InsertEmoticon";
 import MicIcon from "@material-ui/icons/Mic";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import firebase from "firebase";
+import Message from "./Message";
+import TimeAgo from "timeago-react";
+import ThreeBounce from "better-react-spinkit/dist/ThreeBounce";
 
 function ChatScreen({ chat, messages }) {
   const [user] = useAuthState(auth);
   const [input, setInput] = useState("");
+
+  const endOfMessagesRef = useRef(null); //basically connects a pointer to that EndOfMessagesRef component
   const router = useRouter();
   const [messagesSnapshot] = useCollection(
     db.collection("chats").doc(router.query.id).collection("messages").orderBy("timestamp", "asc")
+  );
+
+  const recipientEmail = getRecipientEmail(chat.users, user);
+
+  const [recipientSnapshot] = useCollection(
+    db.collection("users").where("email", "==", recipientEmail)
   );
 
   const showMessages = () => {
@@ -25,14 +36,26 @@ function ChatScreen({ chat, messages }) {
       return messagesSnapshot.docs.map((message) => (
         <Message
           key={message.id}
-          user={message.data.user}
+          user={message.data().user}
           message={{
             ...message.data(),
             timestamp: message.data().timestamp?.toDate().getTime(),
           }}
         />
       ));
+    } else {
+      //this is prefetched data used for when our realtime chat snapshot has not fetched yet
+      return JSON.parse(messages).map((message) => (
+        <Message key={message.id} user={message.user} message={message} />
+      ));
     }
+  };
+
+  const scrollToBottom = () => {
+    endOfMessagesRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   };
 
   const sendMessage = (e) => {
@@ -56,15 +79,30 @@ function ChatScreen({ chat, messages }) {
 
     //sets input to blank after message is sent
     setInput("");
+    scrollToBottom();
   };
+
+  const recipient = recipientSnapshot?.docs?.[0]?.data(); //gives us the recipient
 
   return (
     <Container>
       <Header>
-        <Avatar />
+        {recipient ? <Avatar src={recipient?.photoURL} /> : <Avatar>{recipientEmail[0]}</Avatar>}
+        {/* recipientEmail[0] gives us the first character of the email */}
         <HeaderInformation>
-          <h3>{getRecipientEmail(chat.users, user)}</h3>
-          <p>Last active: </p>
+          <h3>{recipientEmail}</h3>
+          {recipientSnapshot ? (
+            <p>
+              Last active:{" "}
+              {recipient?.lastSeen?.toDate() ? (
+                <TimeAgo datetime={recipient?.lastSeen?.toDate()} />
+              ) : (
+                "Unavailable"
+              )}
+            </p>
+          ) : (
+            <ThreeBounce color="gray" size={7} />
+          )}
         </HeaderInformation>
         <HeaderIcons>
           <IconButton>
@@ -78,7 +116,7 @@ function ChatScreen({ chat, messages }) {
 
       <MessageContainer>
         {showMessages()}
-        <EndOfMessage />
+        <EndOfMessage ref={endOfMessagesRef} />
       </MessageContainer>
 
       <InputContainer>
@@ -145,17 +183,20 @@ const HeaderInformation = styled.div`
 
   /* target h3 in HeaderInformation */
   > h3 {
-    margin-bottom: 3px;
+    margin-bottom: 0px;
   }
 
   > p {
-    font-size: 14px;
+    font-size: 13px;
     color: gray;
+    /* margin-top: -7px; */
   }
 `;
 
 //this is for auto scroll when there's a new message
-const EndOfMessage = styled.div``;
+const EndOfMessage = styled.div`
+  margin-bottom: 50px;
+`;
 
 const HeaderIcons = styled.div``;
 
