@@ -14,8 +14,16 @@ import firebase from "firebase";
 import Message from "./Message";
 import TimeAgo from "timeago-react";
 import ThreeBounce from "better-react-spinkit/dist/ThreeBounce";
+import JSTimeAgo from "javascript-time-ago";
+import en from "javascript-time-ago/locale/en";
 
 function ChatScreen({ chat, messages }) {
+  JSTimeAgo.addLocale(en);
+
+  JSTimeAgo.setDefaultLocale("en");
+
+  const timeAgo = new JSTimeAgo("en-US");
+
   const [user] = useAuthState(auth);
   const [input, setInput] = useState("");
 
@@ -31,7 +39,19 @@ function ChatScreen({ chat, messages }) {
     db.collection("users").where("email", "==", recipientEmail)
   );
 
+  const saveLastSeenEveryTenSeconds = () => {
+    //update the last seen every 10s
+    db.collection("users").doc(user.uid).set(
+      {
+        lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  };
+
   const showMessages = () => {
+    setInterval(saveLastSeenEveryTenSeconds, 15000);
+
     if (messagesSnapshot) {
       return messagesSnapshot.docs.map((message) => (
         <Message
@@ -84,6 +104,21 @@ function ChatScreen({ chat, messages }) {
 
   const recipient = recipientSnapshot?.docs?.[0]?.data(); //gives us the recipient
 
+  //   const compareTimestampsToCheckForOnline = (timestamp) => {
+  //     if (timestamp === undefined) return -1;
+  //     const today = new Date();
+  //     const diff = today - timestamp;
+  //     console.log(today);
+  //     console.log(timestamp);
+  //     console.log(diff);
+
+  //     if (diff / 1000 <= 30) {
+  //       return "Online";
+  //     } else {
+  //       return "-1";
+  //     }
+  //   };
+
   return (
     <Container>
       <Header>
@@ -92,16 +127,15 @@ function ChatScreen({ chat, messages }) {
         <HeaderInformation>
           <h3>{recipientEmail}</h3>
           {recipientSnapshot ? (
-            <p>
-              Last active:{" "}
-              {recipient?.lastSeen?.toDate() ? (
-                <TimeAgo datetime={recipient?.lastSeen?.toDate()} />
-              ) : (
-                "Unavailable"
-              )}
-            </p>
+            recipient?.lastSeen?.toDate() ? (
+              <p>
+                Last active: <TimeAgo datetime={recipient?.lastSeen?.toDate()} locale="en-US" />
+              </p>
+            ) : (
+              <p>Last active: Unavailable</p>
+            )
           ) : (
-            <ThreeBounce color="gray" size={7} />
+            <ThreeBounce color="gray" size={6} />
           )}
         </HeaderInformation>
         <HeaderIcons>
